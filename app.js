@@ -325,20 +325,21 @@ function splitSentences(text) {
   return text.split(/(?<=[。！？!?…])/).filter(function (s) { return s.trim(); });
 }
 
-function sentencePack(text, level) {
+function sentencePack(text, level, style) {
+  var s = STYLES[style || "scholar"];
   var sentences = splitSentences(text);
   if (sentences.length === 0) return text;
   var p = level >= 80 ? 1 : 0.35; /* 重度每句处理，中度约 1/3 */
   var leadP = level >= 80 ? 0 : p * 0.6; /* 重度不加句首连接词，避免与文言开场叠床架屋 */
-  var out = sentences.map(function (s) {
-    var t = s;
+  var out = sentences.map(function (sent) {
+    var t = sent;
     if (Math.random() < p) {
       /* 句尾插感叹 */
-      t = t.replace(/([。！？!?…])$/, randPick(EXCLAMS) + "$1");
+      t = t.replace(/([。！？!?…])$/, randPick(s.exclams) + "$1");
     }
     if (Math.random() < leadP) {
       /* 句首加连接词 */
-      t = randPick(LEADERS) + "，" + t;
+      t = randPick(s.leaders) + "，" + t;
     }
     return t;
   });
@@ -353,6 +354,72 @@ function openClose(text) {
   return randPick(WENYAN_OPEN) + "，" + t + randPick(WENYAN_CLOSE);
 }
 
+/* ---------- 文风词库 ---------- */
+const STYLES = {
+  scholar: {
+    name: "温润如玉",
+    exclams: ["妙哉", "善哉", "诚然", "信矣", "允矣", "雅甚"],
+    leaders: ["窃以为", "吾谓", "观之", "余尝闻", "盖闻", "夫以"],
+    openings: ["盖闻", "夫", "且夫", "尝闻", "余观夫"],
+    closings: ["遂书于此。", "聊记之。", "谨识。", "是为记。"],
+    toneWords: ["也", "矣", "焉", "乎"],
+    pronounBias: "吾",
+    desc: "清雅温润，书卷气浓"
+  },
+  roguish: {
+    name: "狂放不羁",
+    exclams: ["快哉", "壮哉", "妙极", "奇绝", "恨不相逢未嫁时"],
+    leaders: ["哼", "咄", "哇呀呀", "哈哈哈", "痛快", "痛快!"],
+    openings: ["某平生", "吾本", "天生我材必有用"],
+    closings: ["岂不快哉!", "快哉快哉!", "洒家去也!", "痛快!"],
+    toneWords: ["啊", "呀", "唉", "呵"],
+    pronounBias: "某",
+    desc: "豪放洒脱，落拓不群"
+  },
+  melancholy: {
+    name: "清冷孤傲",
+    exclams: ["罢了", "奈何", "寂寥", "清冷", "独对"],
+    leaders: ["不过", "终究", "却道", "只是", "无奈"],
+    openings: ["独坐", "寒窗", "清梦", "孤灯"],
+    closings: ["独自凉。", "终是空。", "付一笑。", "任西风。"],
+    toneWords: ["矣", "耳", "而已"],
+    pronounBias: "余",
+    desc: "孤高自许，淡雅疏离"
+  },
+  romantic: {
+    name: "缠绵悱恻",
+    exclams: ["相思", "情深", "缘尽", "心许", "魂牵"],
+    leaders: ["只因", "唯愿", "若得", "纵是", "纵然"],
+    openings: ["相思", "情深", "缘定", "此心"],
+    closings: ["此情无计可消除。", "愿为西南风，长逝入君怀。", "两情若是久长时。"],
+    toneWords: ["兮", "耶", "啊"],
+    pronounBias: "妾",
+    desc: "情之所钟，缠绵深婉"
+  },
+  humorous: {
+    name: "诙谐打油",
+    exclams: ["噫嘻", "好生有趣", "妙得很", "绝了", "乐煞我也"],
+    leaders: ["却说", "且听", "您道", "看官听说"],
+    openings: ["话说", "且说", "列位"],
+    closings: ["这就是了。", "下回分解。", "闲话休提。"],
+    toneWords: ["呐", "咯", "呀"],
+    pronounBias: "在下",
+    desc: "俏皮打趣，雅俗共赏"
+  },
+  zen: {
+    name: "禅意淡然",
+    exclams: ["菩提", "放下", "随缘", "自在", "本来"],
+    leaders: ["本来", "何须", "毕竟", "须知", "且看"],
+    openings: ["菩提", "白云", "清风", "明月"],
+    closings: ["原来如此。", "自在其中。", "一切皆空。", "随缘而去。"],
+    toneWords: ["也", "乎", "哉"],
+    pronounBias: "贫僧",
+    desc: "放下执念，随缘自在"
+  }
+};
+
+let currentStyle = "scholar";
+
 /* ---------- 主转换入口 ---------- */
 function convert(text, level) {
   var t = (text || "").trim();
@@ -366,7 +433,7 @@ function convert(text, level) {
   }
   /* 3. 句级包装 */
   if (level >= 40) {
-    t = sentencePack(t, level);
+    t = sentencePack(t, level, currentStyle);
   }
   /* 4. 骨架文言 + 地名古称 + 文言起结：重度开启 */
   if (level >= 80) {
@@ -377,6 +444,23 @@ function convert(text, level) {
   /* 5. 全文言：全面重构，去除现代句式，纯文言表达 */
   if (level >= 150) {
     t = fullClassicalConvert(t);
+  }
+  /* 6. 文风特化：根据风格微调 */
+  t = applyStyle(t, currentStyle);
+  return t;
+}
+
+/* 文风特化 */
+function applyStyle(text, style) {
+  var s = STYLES[style] || STYLES.scholar;
+  var t = text;
+  /* 根据风格调整语气词偏好 */
+  if (style === "roguish") {
+    t = t.replace(/，$/g, "！").replace(/！{2,}/g, "！");
+  } else if (style === "melancholy") {
+    t = t.replace(/[！]/g, "。");
+  } else if (style === "humorous") {
+    t = t.replace(/，/g, "，").replace(/。/g, "。");
   }
   return t;
 }
@@ -428,9 +512,20 @@ function fullClassicalConvert(text) {
   var levelTag = document.getElementById("levelTag");
   var toast = document.getElementById("toast");
   var copyHelper = document.getElementById("copyHelper");
+  var styleChips = document.querySelectorAll(".style-chip");
 
   var lastInput = "";
   var lastLevel = 60;
+
+  /* 文风切换 */
+  styleChips.forEach(function(chip) {
+    chip.addEventListener("click", function() {
+      styleChips.forEach(function(c) { c.classList.remove("active"); });
+      chip.classList.add("active");
+      currentStyle = chip.getAttribute("data-style");
+      showToast("切换风格：" + STYLES[currentStyle].name);
+    });
+  });
 
   function showToast(msg) {
     toast.textContent = msg;
