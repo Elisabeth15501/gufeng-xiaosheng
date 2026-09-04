@@ -126,6 +126,12 @@ const DICT = [
   { m: "卷", g: ["竞逐"] },
   { m: "尴尬", g: ["窘迫", "面红耳赤"] },
   { m: "尴尬死了", g: ["窘迫至极，恨无地洞可钻"] },
+  { m: "太好吃了", g: ["甘旨无俦", "味美至极，一尝倾心"] },
+  { m: "有点舍不得", g: ["略有不舍", "心有戚戚，难以割舍"] },
+  { m: "舍不得", g: ["难以割舍", "若有所失"] },
+  { m: "难受", g: ["怅然不舒", "心中怏怏"] },
+  { m: "加班", g: ["夜值", "留役治事"] },
+  { m: "火锅", g: ["古董羹", "沸鼎"] },
 ];
 
 /* ---------- 人称替换（中/重度开启，注意先做词典） ----------
@@ -149,7 +155,6 @@ const TONE_RULES = [
 ];
 
 /* ---------- 句级包装（中/重度） ---------- */
-const EXCLAMS = ["妙哉", "快哉", "善哉", "诚然", "甚矣", "悲夫", "惜哉", "然也", "妙极"];
 const LEADERS = ["吾谓", "然则", "且夫", "窃以为", "盖", "诚如君言", "余观之"];
 
 /* ---------- 文言起结（重度，纯文言，去刻意酸话） ---------- */
@@ -307,6 +312,52 @@ const SKELETON = [
   { m: "想", g: ["思", "欲"] },
   { m: "很", g: ["甚", "极"] },
   { m: "都", g: ["皆", "俱"] },
+  /* ---- 高频白话词（中档换口主力，缺了它们正文就纹丝不动） ---- */
+  { m: "最近", g: ["迩来"] },
+  { m: "近来", g: ["迩来"] },
+  { m: "有点", g: ["微", "略"] },
+  { m: "有些", g: ["略", "微"] },
+  { m: "一点", g: ["些许"] },
+  { m: "原来", g: ["竟"] },
+  { m: "真的", g: ["诚然", "信然"] },
+  { m: "真是", g: ["诚", "实"] },
+  { m: "真好", g: ["甚佳"] },
+  { m: "真美", g: ["甚美"] },
+  { m: "怎么样", g: ["何如"] },
+  { m: "怎样", g: ["何如"] },
+  { m: "怎么", g: ["何", "岂"] },
+  { m: "什么", g: ["何"] },
+  { m: "为什么", g: ["何以"] },
+  { m: "天气", g: ["天色"] },
+  { m: "台风", g: ["飓风"] },
+  { m: "下雨", g: ["落雨"] },
+  { m: "刚刚", g: ["适才"] },
+  { m: "刚才", g: ["适才"] },
+  { m: "突然", g: ["忽", "骤然"] },
+  { m: "马上", g: ["即刻"] },
+  { m: "差点", g: ["险些", "几"] },
+  { m: "大家", g: ["诸君", "众人"] },
+  { m: "同事", g: ["同僚"] },
+  { m: "老板", g: ["东家"] },
+  { m: "上班", g: ["当值", "治事"] },
+  { m: "下班", g: ["散值"] },
+  { m: "回家", g: ["归家"] },
+  { m: "回去", g: ["归"] },
+  { m: "出门", g: ["出户"] },
+  { m: "一起", g: ["相偕", "偕"] },
+  { m: "好像", g: ["恍若", "宛若"] },
+  { m: "好吃", g: ["甘旨", "味美"] },
+  { m: "好玩", g: ["甚有趣"] },
+  { m: "深夜", g: ["夜阑", "深宵"] },
+  { m: "到", g: ["至"] },
+  { m: "去", g: ["往"], re: "(?<!回)去" },
+  { m: "更", g: ["愈"] },
+  { m: "最", g: ["极", "至"] },
+  { m: "又", g: ["复"] },
+  { m: "才", g: ["方"] },
+  { m: "也", g: ["亦"], re: "(?<![也不])也" },
+  { m: "还", g: ["犹"], re: "(?<![原归偿])还" },
+  { m: "就", g: ["即"], re: "(?<![成迁])就" },
 ];
 const SKELETON_SORTED = SKELETON.slice().sort(function (a, b) { return b.m.length - a.m.length; });
 
@@ -314,10 +365,74 @@ function skeletonReplace(text) {
   var t = text;
   for (var i = 0; i < SKELETON_SORTED.length; i++) {
     var d = SKELETON_SORTED[i];
-    var re = new RegExp(escapeReg(d.m), "g");
+    var re = d.re ? new RegExp(d.re, "g") : new RegExp(escapeReg(d.m), "g");
     t = t.replace(re, function () { return randPick(d.g); });
   }
   return t;
+}
+
+/* ---------- 语法文言化（文/全档） ----------
+ * BASE（文·文言起）：虚词与指示词初转，保留部分白话骨架，成"半文言"；
+ * FULL（全·纯文言重构）：的→之、是→乃、了→矣、在→于 等硬转换，
+ * 长词已在骨架/词典先处理，这里只兜底单字虚词。
+ * re 字段为自定义正则（带否定环视防误伤），否则按整词匹配 */
+const GRAMMAR_BASE = [
+  { m: "为什么", g: ["何以"] },
+  { m: "那么", g: ["则"] },
+  { m: "没有", g: ["无"] },
+  { m: "不会", g: ["未能"] },
+  { m: "可以", g: ["可"] },
+  { m: "应该", g: ["当"] },
+  { m: "就是", g: ["即"] },
+  { m: "还是", g: ["抑或"] },
+  { m: "可是", g: ["然"] },
+  { m: "但是", g: ["然"] },
+  { m: "太", g: ["何其", "甚"] },
+  { m: "因为", g: ["因"] },
+  { m: "所以", g: ["故"] },
+  { m: "如果", g: ["若"] },
+  { m: "这里", g: ["此间"] },
+  { m: "那里", g: ["彼处"] },
+  { m: "这", g: ["此"] },
+  { m: "那", g: ["彼"] },
+  { m: "和", g: ["与"] },
+  { m: "跟", g: ["与"] },
+  { m: "会", g: ["将"], re: "(?<![开学])会" },
+  { m: "让", g: ["使"] },
+  { m: "给", g: ["予"] },
+  { m: "用", g: ["以"] },
+  { m: "从", g: ["自"] },
+  { m: "被", g: ["为"] },
+];
+const GRAMMAR_BASE_SORTED = GRAMMAR_BASE.slice().sort(function (a, b) { return b.m.length - a.m.length; });
+
+const GRAMMAR_FULL = [
+  { m: "的", g: ["之"], re: "(?<![目别标])的" },
+  { m: "是", g: ["乃"], re: "(?<![于但可总便仍])是" },
+  { m: "了", g: ["矣"], re: "(?<![知为])了" },
+  { m: "在", g: ["于"], re: "(?<![现存])在" },
+  { m: "吗", g: ["乎"] },
+  { m: "呢", g: ["耶"] },
+  { m: "吧", g: ["罢"] },
+  { m: "得很", g: ["之甚"] },
+];
+const GRAMMAR_FULL_SORTED = GRAMMAR_FULL.slice().sort(function (a, b) { return b.m.length - a.m.length; });
+
+function grammarReplace(text, rules) {
+  var t = text;
+  for (var i = 0; i < rules.length; i++) {
+    var d = rules[i];
+    var re = d.re ? new RegExp(d.re, "g") : new RegExp(escapeReg(d.m), "g");
+    t = t.replace(re, function () { return randPick(d.g); });
+  }
+  return t;
+}
+
+/* 全档润色：去掉程度词叠床架屋（「诚然极甚美」→「诚甚美」） */
+function polishFull(text) {
+  return text
+    .replace(/(甚|极)(甚|极)/g, "甚")
+    .replace(/(诚然|信然)(太|何其)/g, "诚");
 }
 
 /* 按句子切分（保留分隔符） */
@@ -329,8 +444,8 @@ function sentencePack(text, level, style) {
   var s = STYLES[style || "scholar"];
   var sentences = splitSentences(text);
   if (sentences.length === 0) return text;
-  var p = level >= 80 ? 1 : 0.35; /* 重度每句处理，中度约 1/3 */
-  var leadP = level >= 80 ? 0 : p * 0.6; /* 重度不加句首连接词，避免与文言开场叠床架屋 */
+  var p = level >= 100 ? 0.3 : 0.35;      /* 文/全档已有文言起结，感叹低频点缀 */
+  var leadP = level >= 100 ? 0 : 0.2;     /* 文/全档不再加句首连接词，避免与开场白叠床架屋 */
   var out = sentences.map(function (sent) {
     var t = sent;
     if (Math.random() < p) {
@@ -349,9 +464,34 @@ function sentencePack(text, level, style) {
 function openClose(text) {
   var t = text.trim();
   if (!t) return t;
-  /* 结尾补感叹（若没有） */
+  /* 开场白：已有则不再加（防「夫，原夫，」叠加） */
+  var hasOpen = WENYAN_OPEN.some(function (o) { return t.indexOf(o) === 0; });
+  if (!hasOpen) t = randPick(WENYAN_OPEN) + "，" + t;
+  /* 结尾补句号 */
   if (!/[。！？!?…]$/.test(t)) t += "。";
-  return randPick(WENYAN_OPEN) + "，" + t + randPick(WENYAN_CLOSE);
+  /* 收尾：已有则不再加 */
+  var hasClose = WENYAN_CLOSE.some(function (c) {
+    var trimmed = t.trimEnd();
+    return trimmed.length >= c.length && trimmed.lastIndexOf(c) === trimmed.length - c.length;
+  });
+  if (!hasClose) t += randPick(WENYAN_CLOSE);
+  return t;
+}
+
+/* 全档收尾润色：开头若出现「发语词，发语词，」叠加则去一 */
+function polishClassical(text) {
+  var t = text;
+  for (var i = 0; i < WENYAN_OPEN.length; i++) {
+    var o = WENYAN_OPEN[i];
+    if (t.indexOf(o) !== 0) continue;
+    for (var j = 0; j < WENYAN_OPEN.length; j++) {
+      var o2 = WENYAN_OPEN[j];
+      var re = new RegExp("^" + escapeReg(o) + "，" + escapeReg(o2) + "，?");
+      if (re.test(t)) { t = t.replace(re, o + "，"); break; }
+    }
+    break;
+  }
+  return t;
 }
 
 /* ---------- 文风词库 ---------- */
@@ -420,32 +560,44 @@ const STYLES = {
 
 let currentStyle = "scholar";
 
-/* ---------- 主转换入口 ---------- */
+/* ---------- 主转换入口 ----------
+ * 四档语义（滑块 0-200）：
+ *   浅(<50)  = 只换词（流行语词典）
+ *   中(50-)  = 换词改口（+人称/语气/骨架白话词）
+ *   文(100-) = 换词改口 + 语法初转 + 地名转古称 + 文言起结
+ *   全(150+) = 纯文言重构（+的→之/是→乃/了→矣 等硬转换）
+ */
 function convert(text, level) {
   var t = (text || "").trim();
   if (!t) return "";
-  /* 1. 词典替换：所有档位都做（词库替换是打底，越酸越好） */
+  /* 1. 流行语词典：所有档位打底 */
   t = dictReplace(t);
-  /* 2. 人称/语气词：中、重度开启 */
-  if (level >= 40) {
+  /* 2. 中档起：改口（人称、骨架白话词、语气词）+ 句级点缀 */
+  if (level >= 50) {
     t = pronounReplace(t);
+    t = skeletonReplace(t);
     t = toneReplace(t);
-  }
-  /* 3. 句级包装 */
-  if (level >= 40) {
     t = sentencePack(t, level, currentStyle);
   }
-  /* 4. 骨架文言 + 地名古称 + 文言起结：重度开启 */
-  if (level >= 80) {
-    t = skeletonReplace(t);
+  /* 3. 文档起：语法初转 + 地名古称 */
+  if (level >= 100) {
+    t = grammarReplace(t, GRAMMAR_BASE_SORTED);
     t = placeReplace(t);
+  }
+  /* 4. 全档：纯文言重构（硬转换 + 程度词润色） */
+  if (level >= 150) {
+    t = grammarReplace(t, GRAMMAR_FULL_SORTED);
+    t = polishFull(t);
+  }
+  /* 5. 文言起结放最后：起结本身已是文言，
+   *    若先加再转语法会被「是→乃」等规则破坏（是为之记→乃为之记） */
+  if (level >= 100) {
     t = openClose(t);
   }
-  /* 5. 全文言：全面重构，去除现代句式，纯文言表达 */
   if (level >= 150) {
-    t = fullClassicalConvert(t);
+    t = polishClassical(t);
   }
-  /* 6. 文风特化：根据风格微调 */
+  /* 6. 文风特化 */
   t = applyStyle(t, currentStyle);
   return t;
 }
@@ -462,38 +614,6 @@ function applyStyle(text, style) {
   } else if (style === "humorous") {
     t = t.replace(/，/g, "，").replace(/。/g, "。");
   }
-  return t;
-}
-
-/* 全文言转换：在「文·文言」基础上，做彻底的重构 */
-function fullClassicalConvert(text) {
-  var t = text;
-  /* 5a. 彻底骨架替换：每个可能的词都替换（不再随机） */
-  for (var i = 0; i < SKELETON_SORTED.length; i++) {
-    var d = SKELETON_SORTED[i];
-    var re = new RegExp(escapeReg(d.m), "g");
-    t = t.replace(re, d.g[0]); // 取第一个选项，不做随机
-  }
-  /* 5b. 句首加文言发语词，句尾固定用文言终结 */
-  t = t.replace(/^[^\s]*/, function (m) {
-    return randPick(WENYAN_OPEN) + "，" + m;
-  });
-  if (!/[。！？!?…]$/.test(t)) t += randPick(WENYAN_CLOSE);
-  /* 5c. 每句末尾强制加文言语气词（随机） */
-  var sentences = t.split(/(?<=[。！？!?])/);
-  if (sentences.length > 0) {
-    t = sentences.map(function (s) {
-      var trimmed = s.trim();
-      if (!trimmed) return s;
-      var lastChar = trimmed[trimmed.length - 1];
-      if (/[。！？!?…]$/.test(lastChar)) {
-        return trimmed.replace(/[。！？!?…]$/, randPick(EXCLAMS) + "$&");
-      }
-      return trimmed;
-    }).join("");
-  }
-  /* 5d. 标点清理：尽量保留原文标点结构，但把感叹号统一成句号风格 */
-  t = t.replace(/！/g, "。").replace(/！/g, "。");
   return t;
 }
 
