@@ -252,7 +252,18 @@
     margin-top: 8px;
     line-height: 1.6;
   }
-  footer {
+  .footer-note { font-size: 11px; color: var(--ink-soft); }
+.footer-note .ok { color: #4a7c59; }
+.footer-note .warn { color: #b5893a; }
+.engine-badge {
+  display: inline-block;
+  font-size: 12px; font-weight: 700;
+  padding: 4px 10px; border-radius: 999px;
+  margin-bottom: 8px; letter-spacing: 1px;
+}
+.engine-badge.ai { background: #EBF0F7; color: #3D5A80; border: 1px solid #3D5A80; }
+.engine-badge.rule { background: #EAECEF; color: var(--ink-soft); border: 1px solid var(--line); }
+footer {
     text-align: center;
     font-size: 11px;
     color: var(--ink-soft);
@@ -303,7 +314,7 @@
   </div>
   <div class="range-hint">文白越偏古，腔调越正（浅=只换词 · 中=换词改口 · 文=地名转古称 + 文言起结 · 全=纯文言重构）</div>
   <div class="label" style="margin-top:18px">小生风格</div>
-  <div class="style-grid">
+  <div class="style-grid" data-role="style">
     <div class="style-chip active" data-style="scholar" data-icon="🎓">
       <span class="style-icon">🎓</span>
       <div class="style-name">温润如玉</div>
@@ -335,6 +346,20 @@
       <div class="style-desc">放下执念，随缘自在</div>
     </div>
   </div>
+  <div class="label" style="margin-top:18px">变装引擎</div>
+  <div class="style-grid" id="engineGrid" style="grid-template-columns:1fr 1fr">
+    <div class="style-chip active" data-engine="rule">
+      <span class="style-icon">📜</span>
+      <div class="style-name">离线词典</div>
+      <div class="style-desc">纯本地词库替换，稳定无网感</div>
+    </div>
+    <div class="style-chip" data-engine="ai">
+      <span class="style-icon">✨</span>
+      <div class="style-name">AI 小生</div>
+      <div class="style-desc">通义生成自然半文言</div>
+    </div>
+  </div>
+  <div class="range-hint" id="engineHint" style="text-align:left;margin-top:4px">离线词典不依赖网络；AI 变装需接入小工具 AI 接口，未接入/失败会自动回落离线词典。</div>
   <div class="btn-row">
     <button class="btn btn-primary" id="goBtn">变 装</button>
   </div>
@@ -342,6 +367,7 @@
 
 <div class="card">
   <div class="label">小生出品</div>
+  <div id="engineBadge" class="engine-badge" style="display:none"></div>
   <div id="outputBox"></div>
   <div class="op-row">
     <button class="chip" id="againBtn">再转一次</button>
@@ -355,8 +381,10 @@
 </div>
 
 <footer>
-  本工具纯前端离线运行，词库源于网络流行语对照整理，仅供娱乐玩梗。<br>
-  半文不白，风味独特；较真你就输了。
+  <div id="footerNote" class="footer-note">
+    本工具双引擎运行：离线词典（纯本地词库，不依赖网络）+ AI 小生（通义生成自然半文言，接入小工具 AI 接口）。<br>
+    半文不白，风味独特；较真你就输了。
+  </div>
 </footer>
 </div>
 

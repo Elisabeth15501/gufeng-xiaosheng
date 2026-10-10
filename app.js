@@ -660,6 +660,85 @@ function applyStyle(text, style) {
   return t;
 }
 
+/* ---------- AI 变装引擎（小工具 AI 接口，window.xhs.AI） ----------
+ * 首选：把用户文案 + 文风 + 文言程度一起喂给模型，生成自然半文言/纯文言；
+ * 兜底：未接入 / 未加白(AI_NOT_ALLOWED) / 当日用完(AI_QUOTA_EXCEEDED) /
+ *       调用失败 / 返回为空 → 自动回落离线词典 convert()，保证离线可用不白屏。
+ * 返回 Promise<string>（始终是可用文案；引擎类型通过 aiState 旁路记录）。 */
+
+var aiState = { available: false, generating: false };
+
+/* 检测是否已接入小工具 AI 接口（无 AI 能力时不可直接调，先探测 window.xhs.AI） */
+function aiAvailable() {
+  return !!(window.xhs && window.xhs.AI && typeof window.xhs.AI.createModel === "function");
+}
+
+/* 按文言程度档给出对应的文言浓度描述（与四档语义一致） */
+function levelToPromptHint(level) {
+  if (level < 50) return "轻度：只把明显的网络流行语替换成古风说法，整句仍保持白话，读起来轻松自然";
+  if (level < 100) return "中度：替换流行语并改口（人称、语气词），半文半白，古味渐浓";
+  if (level < 150) return "较浓：句法也偏文言，加入文言起结与古称，通篇古雅";
+  return "纯文言：整体重写为规整文言，保留原意，可用文言句式与虚词";
+}
+
+/* 组装 system prompt：固定古风小生人设 + 风格 + 文白浓度 */
+function buildSystemPrompt(style, level) {
+  var s = STYLES[style] || STYLES.scholar;
+  return "你是一位「古风小生文案变装器」，专门把用户的大白话小红书文案改写成半文不白、风味独特的古风小生腔。" +
+    "风格基调：" + s.name + "（" + s.desc + "）。" +
+    "文白浓度：" + levelToPromptHint(level) + "。" +
+    "要求：保留原意与信息量，不生造典故，不用现代网络词，不改变事实；" +
+    "输出只给改写后的文案本身，不要解释、不要加引号、不要分段罗列。";
+}
+
+/* 调 AI 生成文案；返回 { ok, text, fallback, errCode }
+ * fallback=true 表示未走通 AI、调用方应使用离线结果 */
+function aiGenerate(style, level, userText) {
+  var p = new Promise(function (resolve) {
+    if (!aiAvailable()) { resolve({ ok: false, fallback: true, errCode: "NOT_INTEGRATED" }); return; }
+    var messages = [
+      { role: "system", content: buildSystemPrompt(style, level) },
+      { role: "user", content: userText }
+    ];
+    window.xhs.AI.createModel("deepseek-v4-flash")
+      .generateText({
+        messages: messages,
+        temperature: 0.8,
+        maxOutputTokens: 1024
+      })
+      .then(function (res) {
+        var text = (res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content) || "";
+        text = text.trim();
+        if (!text) { resolve({ ok: false, fallback: true, errCode: "EMPTY" }); return; }
+        resolve({ ok: true, text: text, fallback: false });
+      })
+      .catch(function (err) {
+        /* 命中拦截 / 未加白 / 配额用完 / 网络异常 → 一律降级 */
+        var code = (err && (err.code || err.errCode)) || "UNKNOWN";
+        resolve({ ok: false, fallback: true, errCode: code });
+      });
+  });
+  return p;
+}
+
+/* 主变装入口：按当前引擎（rule/ai）分派；AI 失败自动回落离线词典 */
+var currentEngine = "rule";
+
+function convertAll(text, level, style, engine) {
+  /* 离线词典结果只跑一次（词典内有随机采样，避免两次调用结果不一致） */
+  var ruleOut = convert(text, level);
+  if (engine !== "ai") {
+    return { text: ruleOut, engine: "rule" };
+  }
+  /* AI 轨：同步降级封装（调用方用 Promise 等待；此处先用离线结果占位，避免 UI 空白） */
+  return new Promise(function (resolve) {
+    aiGenerate(style, level, text).then(function (r) {
+      if (r.ok) { resolve({ text: r.text, engine: "ai" }); }
+      else { resolve({ text: ruleOut, engine: "rule", fallbackFromAI: r.errCode }); }
+    });
+  });
+}
+
 /* ---------- UI ---------- */
 (function () {
   var inputText = document.getElementById("inputText");
@@ -675,18 +754,39 @@ function applyStyle(text, style) {
   var levelTag = document.getElementById("levelTag");
   var toast = document.getElementById("toast");
   var copyHelper = document.getElementById("copyHelper");
-  var styleChips = document.querySelectorAll(".style-chip");
+  var styleChips = document.querySelectorAll('[data-role="style"] .style-chip');
+  var engineChips = document.querySelectorAll("#engineGrid .style-chip");
+  var engineHint = document.getElementById("engineHint");
+  var footerNote = document.getElementById("footerNote");
 
   var lastInput = "";
   var lastLevel = 60;
 
-  /* 文风切换 */
+  /* 文风切换（仅文风格，不碰引擎格） */
   styleChips.forEach(function(chip) {
     chip.addEventListener("click", function() {
       styleChips.forEach(function(c) { c.classList.remove("active"); });
       chip.classList.add("active");
       currentStyle = chip.getAttribute("data-style");
       showToast("切换风格：" + STYLES[currentStyle].name);
+    });
+  });
+
+  /* 引擎切换：离线词典 / AI 小生 */
+  engineChips.forEach(function(chip) {
+    chip.addEventListener("click", function() {
+      engineChips.forEach(function(c) { c.classList.remove("active"); });
+      chip.classList.add("active");
+      currentEngine = chip.getAttribute("data-engine");
+      if (currentEngine === "ai") {
+        if (aiAvailable()) { showToast("AI 小生已接入，试试自然半文言"); }
+        else { showToast("未检测到 AI 接口，AI 变装将回落离线词典"); }
+      } else {
+        showToast("离线词典：纯本地，不依赖网络");
+      }
+      if (engineHint) engineHint.textContent = (currentEngine === "ai")
+        ? "AI 变装中：通义生成自然半文言；未加白/失败会自动回落离线词典。"
+        : "离线词典不依赖网络；AI 变装需接入小工具 AI 接口，未接入/失败会自动回落离线词典。";
     });
   });
 
@@ -711,25 +811,77 @@ function applyStyle(text, style) {
     levelTag.className = "level-tag " + l.cls;
   });
 
+  /* 首次打开探测 AI 接口接入状态：已接入 / 未接入（内测阶段未加白也显示未接入） */
+  (function probeAI() {
+    var on = aiAvailable();
+    aiState.available = on;
+    var hint = engineHint;
+    if (hint) {
+      hint.textContent = on
+        ? "AI 小生已接入：切换「AI 小生」引擎即可通义生成自然半文言；失败仍自动回落离线词典。"
+        : "未检测到小工具 AI 接口（需内测加白后注入 window.xhs.AI）；「AI 小生」当前会回落离线词典，不影响使用。";
+    }
+    var fn = footerNote;
+    if (fn) {
+      fn.innerHTML = on
+        ? '<span class="ok">AI 引擎已就绪</span> · 离线词典 + AI 小生 双引擎<br>半文不白，风味独特；较真你就输了。'
+        : '<span class="warn">AI 引擎未接入</span> · 当前仅离线词典可用<br>接入小工具 AI 接口并加白后，AI 变装自动生效。';
+    }
+    /* 未接入时，把 AI 引擎选项置灰但不禁用（点了会回落），保留教学意义 */
+  })();
+
+  var engineBadge = document.getElementById("engineBadge");
+
+  function renderOut(result) {
+    var text = (typeof result === "string") ? result : result.text;
+    var used = (typeof result === "string") ? "rule" : result.engine;
+    outputBox.textContent = text;
+    outputBox.classList.add("show");
+    if (engineBadge) {
+      if (used === "ai") {
+        engineBadge.textContent = "✨ AI 小生 · 通义生成";
+        engineBadge.className = "engine-badge ai";
+        engineBadge.style.display = "inline-block";
+      } else {
+        engineBadge.textContent = "📜 离线词典" + (result && result.fallbackFromAI ? "（AI 回落）" : "");
+        engineBadge.className = "engine-badge rule";
+        engineBadge.style.display = "inline-block";
+      }
+    }
+    imgCard.classList.remove("show");
+  }
+
+  /* 按当前引擎跑变装；AI 轨返回 Promise，规则轨返回字符串 */
   function runConvert() {
     lastInput = inputText.value;
     lastLevel = parseInt(levelSlider.value, 10);
-    var out = convert(lastInput, lastLevel);
-    if (!out) { showToast("先写点啥呀，小生才好动笔～"); return; }
-    outputBox.textContent = out;
-    outputBox.classList.add("show");
-    imgCard.classList.remove("show");
+    if (!lastInput.trim()) { showToast("先写点啥呀，小生才好动笔～"); return; }
+    goBtn.disabled = true;
+    goBtn.textContent = "变 装 …";
+    convertAll(lastInput, lastLevel, currentStyle, currentEngine).then(function (r) {
+      renderOut(r.text);
+      goBtn.disabled = false;
+      goBtn.textContent = "变 装";
+      if (currentEngine === "ai") {
+        if (r.engine === "ai") showToast("AI 小生出品，自然半文言");
+        else showToast("AI 未就绪，已回落离线词典");
+      }
+    });
   }
 
   goBtn.addEventListener("click", runConvert);
 
   againBtn.addEventListener("click", function () {
     if (!lastInput.trim()) { showToast("先变装一次再重转嘛"); return; }
-    /* 随机种子自动变化 → 输出不同候选 */
-    outputBox.textContent = convert(lastInput, lastLevel);
-    outputBox.classList.add("show");
-    imgCard.classList.remove("show");
-    showToast("换了副酸牙口，再品品");
+    /* 随机种子自动变化 → 输出不同候选；AI 轨每次请求模型也天然不同 */
+    goBtn.disabled = true;
+    goBtn.textContent = "变 装 …";
+    convertAll(lastInput, lastLevel, currentStyle, currentEngine).then(function (r) {
+      renderOut(r.text);
+      goBtn.disabled = false;
+      goBtn.textContent = "变 装";
+      showToast("换了副酸牙口，再品品");
+    });
   });
 
   copyBtn.addEventListener("click", function () {
