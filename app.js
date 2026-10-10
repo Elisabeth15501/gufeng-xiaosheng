@@ -721,8 +721,9 @@ function aiGenerate(style, level, userText) {
   return p;
 }
 
-/* 主变装入口：按当前引擎（rule/ai）分派；AI 失败自动回落离线词典 */
-var currentEngine = "rule";
+/* 主变装入口：按当前引擎（rule/ai）分派；AI 失败自动回落离线词典
+ * 默认 AI 引擎：加白后直接走通义；未接入/失败自动降级离线，保证不白屏 */
+var currentEngine = "ai";
 
 function convertAll(text, level, style, engine) {
   /* 离线词典结果只跑一次（词典内有随机采样，避免两次调用结果不一致） */

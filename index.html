@@ -348,18 +348,18 @@ footer {
   </div>
   <div class="label" style="margin-top:18px">变装引擎</div>
   <div class="style-grid" id="engineGrid" style="grid-template-columns:1fr 1fr">
-    <div class="style-chip active" data-engine="rule">
+    <div class="style-chip" data-engine="rule">
       <span class="style-icon">📜</span>
       <div class="style-name">离线词典</div>
       <div class="style-desc">纯本地词库替换，稳定无网感</div>
     </div>
-    <div class="style-chip" data-engine="ai">
+    <div class="style-chip active" data-engine="ai">
       <span class="style-icon">✨</span>
       <div class="style-name">AI 小生</div>
-      <div class="style-desc">通义生成自然半文言</div>
+      <div class="style-desc">通义生成自然半文言；未接入/失败自动回落离线词典</div>
     </div>
   </div>
-  <div class="range-hint" id="engineHint" style="text-align:left;margin-top:4px">离线词典不依赖网络；AI 变装需接入小工具 AI 接口，未接入/失败会自动回落离线词典。</div>
+  <div class="range-hint" id="engineHint" style="text-align:left;margin-top:4px">AI 小生：通义生成自然半文言；未接入小工具 AI 接口或调用失败时，自动回落离线词典，不影响使用。</div>
   <div class="btn-row">
     <button class="btn btn-primary" id="goBtn">变 装</button>
   </div>
