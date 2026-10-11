@@ -756,7 +756,7 @@ function convertAll(text, level, style, engine) {
   var toast = document.getElementById("toast");
   var copyHelper = document.getElementById("copyHelper");
   var styleChips = document.querySelectorAll('[data-role="style"] .style-chip');
-  var engineChips = document.querySelectorAll("#engineGrid .style-chip");
+  var aiToggle = document.getElementById("aiToggle");
   var engineHint = document.getElementById("engineHint");
   var footerNote = document.getElementById("footerNote");
 
@@ -773,23 +773,24 @@ function convertAll(text, level, style, engine) {
     });
   });
 
-  /* 引擎切换：离线词典 / AI 小生 */
-  engineChips.forEach(function(chip) {
-    chip.addEventListener("click", function() {
-      engineChips.forEach(function(c) { c.classList.remove("active"); });
-      chip.classList.add("active");
-      currentEngine = chip.getAttribute("data-engine");
-      if (currentEngine === "ai") {
-        if (aiAvailable()) { showToast("AI 小生已接入，试试自然半文言"); }
-        else { showToast("未检测到 AI 接口，AI 变装将回落离线词典"); }
-      } else {
-        showToast("离线词典：纯本地，不依赖网络");
-      }
-      if (engineHint) engineHint.textContent = (currentEngine === "ai")
-        ? "AI 变装中：通义生成自然半文言；未加白/失败会自动回落离线词典。"
-        : "离线词典不依赖网络；AI 变装需接入小工具 AI 接口，未接入/失败会自动回落离线词典。";
+  /* AI 古风小生开关：开=优先走 AI（未接入/失败自动回落离线），关=纯离线词典 */
+  function syncEngineFromToggle() {
+    currentEngine = aiToggle.checked ? "ai" : "rule";
+    if (engineHint) {
+      engineHint.textContent = aiToggle.checked
+        ? "通义生成自然半文言；未接入小工具 AI 接口或调用失败时自动回落离线词典"
+        : "纯离线词典：本地词库替换，不依赖网络";
+    }
+  }
+  if (aiToggle) {
+    aiToggle.addEventListener("change", function () {
+      syncEngineFromToggle();
+      showToast(aiToggle.checked
+        ? (aiAvailable() ? "AI 古风小生已开启，试试自然半文言" : "AI 古风小生已开启（未检测到 AI 接口，将回落离线词典）")
+        : "已切换为离线词典模式");
     });
-  });
+    syncEngineFromToggle();
+  }
 
   function showToast(msg) {
     toast.textContent = msg;
@@ -852,7 +853,7 @@ function convertAll(text, level, style, engine) {
     imgCard.classList.remove("show");
   }
 
-  /* 按当前引擎跑变装；AI 轨返回 Promise，规则轨返回字符串 */
+  /* 按当前引擎跑变装；AI 轨返回 Promise，规则轨同步返回 */
   function runConvert() {
     lastInput = inputText.value;
     lastLevel = parseInt(levelSlider.value, 10);
@@ -860,11 +861,11 @@ function convertAll(text, level, style, engine) {
     goBtn.disabled = true;
     goBtn.textContent = "变 装 …";
     convertAll(lastInput, lastLevel, currentStyle, currentEngine).then(function (r) {
-      renderOut(r.text);
+      renderOut(r);
       goBtn.disabled = false;
       goBtn.textContent = "变 装";
       if (currentEngine === "ai") {
-        if (r.engine === "ai") showToast("AI 小生出品，自然半文言");
+        if (r.engine === "ai") showToast("AI 古风小生出品，自然半文言");
         else showToast("AI 未就绪，已回落离线词典");
       }
     });
@@ -878,7 +879,7 @@ function convertAll(text, level, style, engine) {
     goBtn.disabled = true;
     goBtn.textContent = "变 装 …";
     convertAll(lastInput, lastLevel, currentStyle, currentEngine).then(function (r) {
-      renderOut(r.text);
+      renderOut(r);
       goBtn.disabled = false;
       goBtn.textContent = "变 装";
       showToast("换了副酸牙口，再品品");
